@@ -1,0 +1,62 @@
+# Sobe tudo:  docker compose --profile airflow up -d
+# Só banco + carga manual:  docker compose up -d postgres && docker compose run --rm loader
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    shm_size: 1g
+    command: >
+      postgres -c maintenance_work_mem=1GB -c max_wal_size=8GB
+               -c checkpoint_timeout=30min -c work_mem=64MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      retries: 10
+
+  loader:
+    build: ./loader
+    image: cnpj-loader:latest
+    profiles: ["manual"]
+    env_file: .env
+    volumes: [./dados:/dados]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  airflow:
+    image: apache/airflow:2.10.5-python3.12
+    profiles: ["airflow"]
+    restart: unless-stopped
+    user: "0:0"   # precisa do docker.sock para subir o container do loader
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+      _PIP_ADDITIONAL_REQUIREMENTS: apache-airflow-providers-docker
+      CNPJ_LOADER_IMAGE: cnpj-loader:latest
+      CNPJ_DOCKER_NETWORK: ${COMPOSE_PROJECT_NAME:-receita-federal-cnpj-template}_default
+      CNPJ_DADOS_HOST: ${PWD}/dados
+      DATABASE_URL: ${DATABASE_URL}
+      CNPJ_SCHEMA: ${CNPJ_SCHEMA}
+      CNPJ_MANTER_ZIPS: ${CNPJ_MANTER_ZIPS}
+      RFB_WEBDAV_URL: ${RFB_WEBDAV_URL}
+      RFB_SHARE_TOKEN: ${RFB_SHARE_TOKEN}
+    command: standalone
+    ports: ["${AIRFLOW_PORT:-8080}:8080"]
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres: {condition: service_healthy}
+
+volumes:
+  pgdata:
