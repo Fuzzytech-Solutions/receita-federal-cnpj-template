@@ -37,7 +37,7 @@ from layout import INDICES, TABELAS, tabela_do_zip
 sys.stdout.reconfigure(encoding="utf-8")
 
 BASE_URL = os.environ.get("RFB_WEBDAV_URL", "https://arquivos.receitafederal.gov.br/public.php/webdav/")
-SHARE_TOKEN = os.environ.get("RFB_SHARE_TOKEN", "YggdBLfdninEJX9")
+SHARE_TOKEN = os.environ.get("RFB_SHARE_TOKEN", "YggdBLfdninEJX9")  # gitleaks:allow (link público)
 SCHEMA = os.environ.get("CNPJ_SCHEMA", "receita_federal")
 SCHEMA_CARGA = f"{SCHEMA}_carga"
 SCHEMA_CONTROLE = f"{SCHEMA}_controle"
